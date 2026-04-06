@@ -75,6 +75,7 @@ class Command(enum.IntEnum):
     MF1_CHECK_KEYS_ON_BLOCK = 2015
     HF14A_GET_CONFIG = 2200
     HF14A_SET_CONFIG = 2201
+    HF14A_SNIFF = 2020
 
     EM410X_SCAN = 3000
     EM410X_WRITE_TO_T55XX = 3001
@@ -83,7 +84,13 @@ class Command(enum.IntEnum):
     HIDPROX_WRITE_TO_T55XX = 3003
     VIKING_SCAN = 3004
     VIKING_WRITE_TO_T55XX = 3005
+    PAC_SCAN = 3014
+    PAC_WRITE_TO_T55XX = 3015
     ADC_GENERIC_READ = 3009
+    IOPROX_SCAN = 3010
+    IOPROX_WRITE_TO_T55XX = 3011
+    IOPROX_DECODE_RAW = 3012
+    IOPROX_COMPOSE_ID = 3013
 
     MF1_WRITE_EMU_BLOCK_DATA = 4000
     HF14A_SET_ANTI_COLL_DATA = 4001
@@ -137,6 +144,13 @@ class Command(enum.IntEnum):
     HIDPROX_GET_EMU_ID = 5003
     VIKING_SET_EMU_ID = 5004
     VIKING_GET_EMU_ID = 5005
+    PAC_SET_EMU_ID = 5006
+    PAC_GET_EMU_ID = 5007
+    IOPROX_SET_EMU_ID = 5008
+    IOPROX_GET_EMU_ID = 5009
+    EM4X05_SCAN = 3030
+    EM4X05_READSNIFF = 3032
+    LF_SNIFF = 3031
 
 
 @enum.unique
@@ -270,6 +284,7 @@ class TagSpecificType(enum.IntEnum):
     # securakey
     # gallagher
     # PAC/Stanley
+    PAC = 150
     # Presco
     # Visa2000
     Viking = 170
@@ -278,7 +293,7 @@ class TagSpecificType(enum.IntEnum):
 
     # FSK Tag-Talk-First      200
     HIDProx = 200
-    # ioProx
+    ioProx = 201
     # AWID
     # Paradox
 
@@ -361,6 +376,10 @@ class TagSpecificType(enum.IntEnum):
             return "EM410X Electra"
         elif self == TagSpecificType.HIDProx:
             return "HIDProx"
+        elif self == TagSpecificType.ioProx:
+            return "ioProx"
+        elif self == TagSpecificType.PAC:
+            return "PAC/Stanley"
         elif self == TagSpecificType.Viking:
             return "Viking"
         elif self == TagSpecificType.MIFARE_Mini:
@@ -513,6 +532,7 @@ class MifareClassicDarksideStatus(enum.IntEnum):
 class AnimationMode(enum.IntEnum):
     FULL = 0
     MINIMAL = 1
+    SYMMETRIC = 3
     NONE = 2
 
     def __str__(self):
@@ -520,6 +540,8 @@ class AnimationMode(enum.IntEnum):
             return "Full animation"
         elif self == AnimationMode.MINIMAL:
             return "Minimal animation"
+        elif self == AnimationMode.SYMMETRIC:
+            return "Symmetric animation"
         elif self == AnimationMode.NONE:
             return "No animation"
 

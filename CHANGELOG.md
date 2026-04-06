@@ -4,6 +4,9 @@ This project uses the changelog in accordance with [keepchangelog](http://keepac
 
 ## [unreleased][unreleased]
  - Added `hf mfu nfcimport` to import Flipper Zero `.nfc` files into MFU/NTAG emulator slots, with `--amiibo` flag for automatic PWD/PACK derivation (@fmuk)
+ - Added PAC/Stanley LF protocol support: read, emulate and T55xx clone (@kevihiiin, @danieltwagner)
+ - Fix firmware application USB serial number (@taichunmin)
+ - Added ioProx LF protocol support (read, emulate and T55xx clone)
  - Added commands to dump and clone Mifare tags
  - Fix bad missing tools warning (@suut)
  - Fix for FAST_READ command for nfc - mf0 tags
@@ -18,6 +21,7 @@ This project uses the changelog in accordance with [keepchangelog](http://keepac
  - Added cmd for set mf1 config 'field_off_do_reset' (@xianglin1998)
  - Fix Windows build (@suut)
  - Added `hf 14a config` to deal with badly configured cards (@azuwis)
+ - New Symmetrical LED Animation Mode and Improved Minimal Mode (@WillyJL)
 
 ## [v2.1.0][2025-09-02]
  - Added UV, formatter and linter. Contribution guidelines. (@GameTec-live)

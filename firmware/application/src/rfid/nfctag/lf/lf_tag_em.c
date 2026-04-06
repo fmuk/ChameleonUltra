@@ -5,10 +5,13 @@
 #include "bsp_delay.h"
 #include "fds_util.h"
 #include "nrf_gpio.h"
+#include "nrf_soc.h"
 #include "nrfx_lpcomp.h"
 #include "nrfx_pwm.h"
 #include "protocols/em410x.h"
 #include "protocols/hidprox.h"
+#include "protocols/ioprox.h"
+#include "protocols/pac.h"
 #include "protocols/viking.h"
 #include "syssleep.h"
 #include "tag_emulation.h"
@@ -135,6 +138,23 @@ static void pwm_init(void) {
 }
 
 static void lf_sense_enable(void) {
+    // PWM bit timing divides HFCLK by a fixed ratio. On HFINT (64 MHz RC,
+    // ±1.5% at 25°C after factory trim, wider over temperature) this gives a
+    // chip-to-chip spread that NRZ readers — which see cumulative error across
+    // runs of same-polarity bits with no intra-run resync — reject even when
+    // Manchester/FSK readers don't. Holding HFXO brings the PWM clock to
+    // ±40 ppm. We can't lock to the reader's carrier (tag-mode antenna taps
+    // on this board are envelope-only), so this is as good as it gets.
+    //
+    // Paired release in lf_sense_disable(). SD reference-counts HFXO requests,
+    // so this coexists with BLE. Both functions run from thread context
+    // (tag_mode_enter/tag_emulation_sense_end) where SVCs are safe.
+    sd_clock_hfclk_request();
+    uint32_t hfclk_running = 0;
+    while (!hfclk_running) {
+        sd_clock_hfclk_is_running(&hfclk_running);
+    }
+
     lpcomp_init();
     pwm_init();  // use precise hardware pwm to broadcast card id
     if (is_lf_field_exists()) {
@@ -147,6 +167,7 @@ static void lf_sense_disable(void) {
     nrfx_lpcomp_uninit();
     m_pwm_seq = NULL;
     m_is_lf_emulating = false;
+    sd_clock_hfclk_release();
 }
 
 static enum {
@@ -205,6 +226,15 @@ int lf_tag_data_loadcb(tag_specific_type_t type, tag_data_buffer_t *buffer) {
         return LF_HIDPROX_TAG_ID_SIZE;
     }
 
+    if (type == TAG_TYPE_IOPROX && buffer->length >= LF_IOPROX_TAG_ID_SIZE) {
+        m_tag_type = type;
+        void *codec = ioprox.alloc();
+        m_pwm_seq = ioprox.modulator(codec, buffer->buffer);
+        ioprox.free(codec);
+        NRF_LOG_INFO("load lf ioprox data finish.");
+        return LF_IOPROX_TAG_ID_SIZE;
+    }
+
     if (type == TAG_TYPE_VIKING && buffer->length >= LF_VIKING_TAG_ID_SIZE) {
         m_tag_type = type;
         void *codec = viking.alloc();
@@ -212,6 +242,15 @@ int lf_tag_data_loadcb(tag_specific_type_t type, tag_data_buffer_t *buffer) {
         viking.free(codec);
         NRF_LOG_INFO("load lf viking data finish.");
         return LF_VIKING_TAG_ID_SIZE;
+    }
+
+    if (type == TAG_TYPE_PAC && buffer->length >= LF_PAC_TAG_ID_SIZE) {
+        m_tag_type = type;
+        void *codec = pac.alloc();
+        m_pwm_seq = pac.modulator(codec, buffer->buffer);
+        pac.free(codec);
+        NRF_LOG_INFO("load lf pac data finish.");
+        return LF_PAC_TAG_ID_SIZE;
     }
 
     NRF_LOG_ERROR("no valid data exists in buffer for tag type: %d.", type);
@@ -244,6 +283,17 @@ int lf_tag_hidprox_data_savecb(tag_specific_type_t type, tag_data_buffer_t *buff
     // Make sure to load this tag before allowing saving
     // Just save the original card package directly
     return m_tag_type == TAG_TYPE_HID_PROX ? LF_HIDPROX_TAG_ID_SIZE : 0;
+}
+
+/** @brief Id card deposit card number before callback
+ * @param type      Refined tag type
+ * @param buffer    Data buffer
+ * @return The length of the data that needs to be saved is that it does not save when 0
+ */
+int lf_tag_ioprox_data_savecb(tag_specific_type_t type, tag_data_buffer_t *buffer) {
+    // Make sure to load this tag before allowing saving
+    // Just save the original card package directly
+    return m_tag_type == TAG_TYPE_IOPROX ? LF_IOPROX_TAG_ID_SIZE : 0;
 }
 
 /** @brief Id card deposit card number before callback
@@ -308,8 +358,30 @@ bool lf_tag_hidprox_data_factory(uint8_t slot, tag_specific_type_t tag_type) {
  * @param tag_type  Refined tag type
  * @return Whether the format is successful, if the formatting is successful, it will return to True, otherwise False will be returned
  */
+bool lf_tag_ioprox_data_factory(uint8_t slot, tag_specific_type_t tag_type) {
+    uint8_t tag_id[16] = { 
+        0x01,0xAA,0x30,0x39,0x00,0x78,0x6A,0xA0,0x33,0x09,0xCF,0xEF,0x00,0x00,0x00,0x00
+    };
+    return lf_tag_data_factory(slot, tag_type, tag_id, sizeof(tag_id));
+}
+
+/** @brief Id card deposit card number before callback
+ * @param slot      Card slot number
+ * @param tag_type  Refined tag type
+ * @return Whether the format is successful, if the formatting is successful, it will return to True, otherwise False will be returned
+ */
 bool lf_tag_viking_data_factory(uint8_t slot, tag_specific_type_t tag_type) {
     // default id
     uint8_t tag_id[4] = {0xDE, 0xAD, 0xBE, 0xEF};
+    return lf_tag_data_factory(slot, tag_type, tag_id, sizeof(tag_id));
+}
+
+int lf_tag_pac_data_savecb(tag_specific_type_t type, tag_data_buffer_t *buffer) {
+    return m_tag_type == TAG_TYPE_PAC ? LF_PAC_TAG_ID_SIZE : 0;
+}
+
+bool lf_tag_pac_data_factory(uint8_t slot, tag_specific_type_t tag_type) {
+    // default id: 8 ASCII bytes
+    uint8_t tag_id[8] = {'C', 'A', 'R', 'D', '0', '0', '0', '1'};
     return lf_tag_data_factory(slot, tag_type, tag_id, sizeof(tag_id));
 }
